@@ -52,9 +52,10 @@ char data_tx[10];
 char data_rx[2];
 int len;
 int overflow=0;
-float obseg=1.0;
-int obseg_int=1;
+float sirina=3.0;//3=sirina sejalnice
+float obseg;
 float razdalja;
+float povrsina;
 char* stevka_tmp;
 char lcd_text[6];
 /* USER CODE END PV */
@@ -85,12 +86,12 @@ char *substring(int i,int j,char *ch)
     return (char *)ch1;
 }
 
-float distance(int counter, float circum){
-  return (float)(counter * circum);
+float area(int counter){
+  return (float)counter/4100;
 }
 
 float speed(float time, float circum){
-  return (float)(circum/time);
+  return (float)(circum/time)*1000;
 }
 
 
@@ -104,6 +105,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
   else{
     cas = TIM2->CNT;
     stevec++;
+//TODO:posebno stetje do 50 obratov!!!!
 /*
     if (stevec<50){
       sprintf(lcd_text, "%d",stevec);
@@ -124,12 +126,12 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
       hitrost=speed((float)cas, obseg);
     }
     if (hitrost==0.0){
-        sprintf(data_tx, "#%.3f-0~",distance(stevec,obseg));
+        sprintf(data_tx, "#%.4f-0~",area(stevec));
         len=strlen(data_tx);
         HAL_UART_Transmit( &huart1, data_tx, len, 100);
     }
     else{
-          sprintf(data_tx, "#%.3f-%2.1f~",distance(stevec,obseg), hitrost);
+          sprintf(data_tx, "#%.4f-%2.1f~",area(stevec), hitrost);
           len=strlen(data_tx);
           HAL_UART_Transmit( &huart1, data_tx, len, 100);
     }
@@ -149,8 +151,8 @@ void TIM2_IRQHandler(void)
   
   TIM2->SR &=~TIM_SR_UIF;
   overflow++;
-  if (overflow==1){ 
-    sprintf(data_tx, "#%.3f-0~",distance(stevec, obseg));
+  if (overflow==1){
+    sprintf(data_tx, "#%.4f-0~",area(stevec));
     len=strlen(data_tx);
     HAL_UART_Transmit( &huart1, (uint8_t*)data_tx, len, 100);
   }
@@ -190,20 +192,11 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
                             len=strlen(data_tx);
                             HAL_UART_Transmit( &huart1, (uint8_t*)data_tx , len, 100);
                             }
-                          if (Rx_Buffer[0]==37) //37=%=nastavljanje obsega
-                          {
-                            
-                            stevka_tmp=substring(1,sizeof(Rx_Buffer),Rx_Buffer);
-                            obseg_int=atoi(stevka_tmp);
-                            sprintf(data_tx, "+%d~",obseg_int);
-                            len=strlen(data_tx);
-                            obseg=(float)obseg_int/1000;
-                            HAL_UART_Transmit( &huart1, (uint8_t*)data_tx , len, 100);
-                            }
+
                           if (Rx_Buffer[0]==36) //36=$=refresh button
                           {
-                        	  float debug=distance(stevec, obseg);
-                            sprintf(data_tx, "#%.3f-0~", distance(stevec, obseg));
+                        	  float debug=area(stevec);
+                            sprintf(data_tx, "#%.4f-0~", area(stevec));
                             len=strlen(data_tx);
                             HAL_UART_Transmit( &huart1, (uint8_t*)data_tx , len, 100);
                             }
@@ -223,7 +216,7 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-
+	obseg=100/41/sirina;
   /* USER CODE END 1 */
 
   /* MCU Configuration----------------------------------------------------------*/
