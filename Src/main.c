@@ -35,6 +35,8 @@
 #include "stm32l1xx_hal.h"
 
 /* USER CODE BEGIN Includes */
+#include "stm32l152c_discovery.h"
+#include "stm32l152c_discovery_glass_lcd.h"
 
 /* USER CODE END Includes */
 
@@ -47,14 +49,12 @@ UART_HandleTypeDef huart1;
 /* Private variables ---------------------------------------------------------*/
 int stevec=0;
 int cas=0;
-float hitrost;
 char data_tx[10];
 char data_rx[2];
 int len;
 int overflow=0;
 float sirina=3.0;//3=sirina sejalnice
 float obseg;
-float razdalja;
 float povrsina;
 char* stevka_tmp;
 char lcd_text[6];
@@ -82,64 +82,76 @@ char *substring(int i,int j,char *ch)
         ch1[k]=ch[i];
         i++;k++;
     }
-
     return (char *)ch1;
 }
 
 float area(int counter){
-  return (float)counter/4100;
+		return (float)counter/4100;
 }
 
 float speed(float time, float circum){
   return (float)(circum/time)*1000;
 }
 
+void display(int counter, int mode){
+	if (counter<50){
+		sprintf(lcd_text, "%d",counter);
+		BSP_LCD_GLASS_Clear();
+		BSP_LCD_GLASS_DisplayString((uint8_t*)lcd_text);
+	}
+	else{
+		if( counter%5 == 0 ){
+		      sprintf(lcd_text, "%2.3f",area(counter));
+		      BSP_LCD_GLASS_Clear();
+		      BSP_LCD_GLASS_DisplayString((uint8_t*)lcd_text);
+		}
+		if (mode==1){
+		      sprintf(lcd_text, "%2.3f",area(counter));
+		      BSP_LCD_GLASS_Clear();
+		      BSP_LCD_GLASS_DisplayString((uint8_t*)lcd_text);
+		}
+	}
+	return;
+}
+
+void send_uart(int counter, int time){
+	if (counter<50){
+		if (time==0){
+			sprintf(data_tx, "#%d-0~",stevec);
+		}
+		else{
+			sprintf(data_tx, "#%d-%2.1f~",stevec, speed((float)time, obseg));
+		}
+	}
+	else{
+		if (time==0){
+			sprintf(data_tx, "#%.4f-0~",area(stevec));
+		}
+		else{
+			sprintf(data_tx, "#%.4f-%2.1f~",area(stevec), speed((float)time, obseg));
+		}
+	}
+	len=strlen(data_tx);
+	HAL_UART_Transmit( &huart1, data_tx, len, 100);
+	return;
+
+}
 
 //ineruptna rutina za 'magnetni' stik na A5-GND
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
+	stevec++;
   if (overflow!=0){
-    TIM2->CNT=0;
-    stevec++;
+    cas=0;
     overflow=0;
   }
   else{
     cas = TIM2->CNT;
-    stevec++;
-//TODO:posebno stetje do 50 obratov!!!!
-/*
-    if (stevec<50){
-      sprintf(lcd_text, "%d",stevec);
-      BSP_LCD_GLASS_Clear();
-      BSP_LCD_GLASS_DisplayString((uint8_t*)lcd_text);
-    }
-    if (stevec % 5 == 0 && stevec >= 50 ){
-      povrsina=stevec/(float)(4100);
-      sprintf(lcd_text, "%02.3f",povrsina);
-      BSP_LCD_GLASS_Clear();
-      BSP_LCD_GLASS_DisplayString((uint8_t*)lcd_text);
-    }*/
-    if (cas==0){
-      hitrost=0.0;
-    }
-    else{
-      //hitrost=obseg/10/(float)cas;
-      hitrost=speed((float)cas, obseg);
-    }
-    if (hitrost==0.0){
-        sprintf(data_tx, "#%.4f-0~",area(stevec));
-        len=strlen(data_tx);
-        HAL_UART_Transmit( &huart1, data_tx, len, 100);
-    }
-    else{
-          sprintf(data_tx, "#%.4f-%2.1f~",area(stevec), hitrost);
-          len=strlen(data_tx);
-          HAL_UART_Transmit( &huart1, data_tx, len, 100);
-    }
-    TIM2->CNT=0;
   }
+  TIM2->CNT=0;
+
+  send_uart(stevec,cas);
+  display(stevec,0);
 }
-
-
 
 
   /**
@@ -151,11 +163,8 @@ void TIM2_IRQHandler(void)
   
   TIM2->SR &=~TIM_SR_UIF;
   overflow++;
-  if (overflow==1){
-    sprintf(data_tx, "#%.4f-0~",area(stevec));
-    len=strlen(data_tx);
-    HAL_UART_Transmit( &huart1, (uint8_t*)data_tx, len, 100);
-  }
+  send_uart(stevec,0);
+  display(stevec,0);
   
   /* USER CODE END TIM2_IRQn 0 */
   //HAL_TIM_IRQHandler(&htim2);
@@ -195,10 +204,8 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 
                           if (Rx_Buffer[0]==36) //36=$=refresh button
                           {
-                        	  float debug=area(stevec);
-                            sprintf(data_tx, "#%.4f-0~", area(stevec));
-                            len=strlen(data_tx);
-                            HAL_UART_Transmit( &huart1, (uint8_t*)data_tx , len, 100);
+                            display(stevec,1);
+                            send_uart(stevec,0);
                             }
                           }
                   HAL_UART_Receive_IT(&huart1, Rx_data, 1);	//activate UART receive interrupt every time
